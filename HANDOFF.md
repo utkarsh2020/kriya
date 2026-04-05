@@ -548,15 +548,3 @@ AGENTD_JWT_SECRET=<32-hex-chars>              # set for persistence across resta
 AGENTD_VAULT_PASS=<passphrase>               # MUST set before first run
 AGENTD_MAX_AGENTS=3                           # 1-2 for Pi Zero W
 ```
-
----
-
-## 10. Immediate Next Conversation Starter
-
-When continuing in Kilo Code, paste this prompt to bootstrap context:
-
-> "I'm continuing development of AgentOS, a Python stdlib-only agentic AI runtime targeting Raspberry Pi Zero W (ARMv6 32-bit, 512 MB RAM). The repo is at [YOUR REPO URL]. It currently has 40 passing tests and ships: asyncio daemon, SQLite state store, async event bus, LLM abstraction (Anthropic/OpenAI/Ollama), short+long-term memory, agent executor with skill call protocol, task DAG scheduler, REST API, JWT/RBAC vault, CLI tool, web dashboard, 7 built-in skills, and multi-arch installer. 
->
-> Read HANDOFF.md fully before starting. Then read the specific source file for the component we're working on. The key constraint is: zero external pip dependencies — pure Python stdlib only.
->
-> Today we're building: [ITEM FROM SECTION 7]"
