@@ -366,11 +366,11 @@ These endpoints are referenced in the README or dashboard but not yet implemente
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/users` | GET | List users |
-| `/api/users` | POST | Create user |
-| `/api/users/<id>` | DELETE | Delete user |
-| `/api/users/<id>/role` | PUT | Change user role |
-| `/api/users/<id>/password` | PUT | Change password |
+| `/api/users` | GET | List users | ✅ Complete |
+| `/api/users` | POST | Create user | ✅ Complete |
+| `/api/users/<id>` | DELETE | Delete user | ✅ Complete |
+| `/api/users/<id>/role` | PUT | Change user role | ✅ Complete |
+| `/api/users/<id>/password` | PUT | Change password | ✅ Complete |
 | `/api/projects/<id>/memory` | GET | List project memories |
 | `/api/projects/<id>/memory/<id>` | DELETE | Delete a memory |
 | `/api/projects/<id>/tasks/<id>` | DELETE | Delete a task |

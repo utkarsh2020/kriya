@@ -861,6 +861,39 @@ All endpoints require `Authorization: Bearer <token>` unless noted.
 |---|---|---|
 | `GET` | `/api/skills` | List loaded skills |
 
+### Users
+
+| Method | Path | Description | Required Capability |
+|---|---|---|---|
+| `GET` | `/api/users` | List all users | `project:read` |
+| `POST` | `/api/users` | Create a new user | `admin` |
+| `DELETE` | `/api/users/<id>` | Delete a user by ID | `admin` |
+| `PUT` | `/api/users/<id>/role` | Change user role | `admin` |
+| `PUT` | `/api/users/<id>/password` | Change user password | `admin` or own user |
+
+**Create user request:**
+```json
+{
+  "username": "string",
+  "password": "string",
+  "role": "read_only|skill|agent|project_owner|admin"
+}
+```
+
+**Change role request:**
+```json
+{
+  "role": "read_only|skill|agent|project_owner|admin"
+}
+```
+
+**Change password request:**
+```json
+{
+  "password": "string"
+}
+```
+
 ---
 
 ## Project structure
