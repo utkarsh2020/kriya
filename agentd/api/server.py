@@ -20,7 +20,7 @@ from agentd.core.scheduler import run_project, next_run_time, CronScheduler
 from agentd.security.vault import (
     authenticate, verify_token, has_capability,
     set_secret, get_secret, list_secrets, delete_secret,
-    hash_password,
+    hash_password, ROLES,
 )
 
 
@@ -404,6 +404,73 @@ def del_proj_secret(h: AgentOSHandler, *_, **params):
     h._send({"deleted": True})
 
 
+# ── Task extras ───────────────────────────────────────────────────────────
+
+@route("DELETE", "/api/projects/<project_id>/tasks/<id>")
+def delete_task(h: AgentOSHandler, *_, **params):
+    if not h._require("task:write"):
+        return
+    t = store.fetch_one("tasks", params["id"])
+    if not t or t.get("project_id") != params["project_id"]:
+        return h._err("Not found", 404)
+    store.delete("tasks", params["id"])
+    h._send({"deleted": True})
+
+
+@route("PUT", "/api/projects/<id>/schedule")
+def update_schedule(h: AgentOSHandler, *_, **params):
+    if not h._require("project:write"):
+        return
+    body = h._body()
+    sched = body.get("schedule", "").strip()
+    if not sched:
+        return h._err("schedule required")
+    store.update("projects", params["id"], schedule=sched, updated_at=time.time())
+    # Upsert scheduled_job
+    existing = store.raw_query("SELECT id FROM scheduled_jobs WHERE project_id=?", (params["id"],))
+    if existing:
+        store.raw_query(
+            "UPDATE scheduled_jobs SET schedule=?, next_run=?, enabled=1 WHERE project_id=?",
+            (sched, next_run_time(sched), params["id"])
+        )
+    else:
+        store.insert("scheduled_jobs",
+            project_id=params["id"],
+            schedule=sched,
+            next_run=next_run_time(sched),
+        )
+    h._send({"updated": True, "schedule": sched})
+
+
+# ── Memory ─────────────────────────────────────────────────────────────────
+
+@route("GET", "/api/projects/<project_id>/memory")
+def list_project_memory(h: AgentOSHandler, path, qs, **params):
+    if not h._require("project:read"):
+        return
+    limit = int(qs.get("limit", [50])[0])
+    rows = store.raw_query(
+        "SELECT id, agent_id, content, importance, created_at FROM memory "
+        "WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
+        (params["project_id"], limit)
+    )
+    h._send(rows)
+
+
+@route("DELETE", "/api/projects/<project_id>/memory/<id>")
+def delete_memory(h: AgentOSHandler, *_, **params):
+    if not h._require("project:write"):
+        return
+    rows = store.raw_query(
+        "SELECT id FROM memory WHERE id=? AND project_id=?",
+        (params["id"], params["project_id"])
+    )
+    if not rows:
+        return h._err("Not found", 404)
+    store.raw_query("DELETE FROM memory WHERE id=?", (params["id"],))
+    h._send({"deleted": True})
+
+
 # ── Events (audit log) ────────────────────────────────────────────────────
 
 @route("GET", "/api/events")
@@ -422,6 +489,88 @@ def list_events(h: AgentOSHandler, path, qs):
             "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
         )
     h._send(rows)
+
+
+# ── Users ─────────────────────────────────────────────────────────────────
+
+@route("GET", "/api/users")
+def list_users(h: AgentOSHandler, *_):
+    if not h._require("admin:read"):
+        return
+    rows = store.fetch_all("users")
+    # Never return password hashes
+    for r in rows:
+        r.pop("password_hash", None)
+    h._send(rows)
+
+
+@route("POST", "/api/users")
+def create_user(h: AgentOSHandler, *_):
+    if not h._require("admin:write"):
+        return
+    body = h._body()
+    username = body.get("username", "").strip()
+    password = body.get("password", "").strip()
+    role     = body.get("role", "read_only")
+    if not username or not password:
+        return h._err("username and password required")
+    if role not in ROLES:
+        return h._err(f"role must be one of: {', '.join(ROLES)}")
+    existing = store.raw_query("SELECT id FROM users WHERE username=?", (username,))
+    if existing:
+        return h._err("username already exists", 409)
+    uid = store.insert("users",
+        username=username,
+        password_hash=hash_password(password),
+        role=role,
+        created_at=time.time(),
+    )
+    row = store.fetch_one("users", uid)
+    row.pop("password_hash", None)
+    h._send(row, 201)
+
+
+@route("DELETE", "/api/users/<id>")
+def delete_user(h: AgentOSHandler, *_, **params):
+    claims = h._require("admin:write")
+    if not claims:
+        return
+    if params["id"] == claims.get("sub"):
+        return h._err("Cannot delete your own account", 400)
+    store.delete("users", params["id"])
+    h._send({"deleted": True})
+
+
+@route("PUT", "/api/users/<id>/role")
+def change_user_role(h: AgentOSHandler, *_, **params):
+    if not h._require("admin:write"):
+        return
+    body = h._body()
+    role = body.get("role", "")
+    if role not in ROLES:
+        return h._err(f"role must be one of: {', '.join(ROLES)}")
+    store.update("users", params["id"], role=role)
+    row = store.fetch_one("users", params["id"])
+    if not row:
+        return h._err("User not found", 404)
+    row.pop("password_hash", None)
+    h._send(row)
+
+
+@route("PUT", "/api/users/<id>/password")
+def change_user_password(h: AgentOSHandler, *_, **params):
+    claims = h._require("project:read")   # any authenticated user
+    if not claims:
+        return
+    # Non-admins can only change their own password
+    if claims.get("sub") != params["id"] and not has_capability(claims.get("rol", ""), "admin:write"):
+        return h._err("Forbidden", 403)
+    body = h._body()
+    password = body.get("password", "").strip()
+    if not password:
+        return h._err("password required")
+    store.update("users", params["id"], password_hash=hash_password(password))
+    h._send({"updated": True})
 
 
 # ── Skills ────────────────────────────────────────────────────────────────

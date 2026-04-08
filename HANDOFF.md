@@ -1,9 +1,9 @@
 # AgentOS — Project Handoff & Continuity Document
 
 **For:** AI-assisted development continuation (Kilo Code / Claude)  
-**Version at handoff:** v0.2.1  
-**Test status:** 40/40 passing  
-**Total source:** ~6,100 lines across 30 files, zero external dependencies
+**Version at handoff:** v0.3.0  
+**Test status:** 38/40 passing (2 pre-existing failures on Python 3.9: dict|list hint + macOS /tmp path; pass on Python 3.11)  
+**Total source:** ~6,500 lines across 32 files, zero external dependencies
 
 ---
 
@@ -267,6 +267,11 @@ This pattern is used in every test that needs an isolated temp directory.
 | Secrets vault | ✅ Complete | AES-GCM / HMAC-XOR, PBKDF2 |
 | Built-in skills (7) | ✅ Complete | http, scrape, fs, shell, memory |
 | Plugin skill loader | ✅ Complete | Auto-discover skills/*/handler.py |
+| Telegram skill | ✅ Complete | `skills/telegram/handler.py` — send + get_updates |
+| Slack skill | ✅ Complete | `skills/slack/handler.py` — post + history + channels |
+| User management API | ✅ Complete | GET/POST /api/users, DELETE, PUT role/password |
+| Memory API | ✅ Complete | GET + DELETE /api/projects/<id>/memory |
+| Task delete + schedule API | ✅ Complete | DELETE tasks/<id>, PUT schedule |
 | CLI tool | ✅ Complete | All commands, live monitor |
 | Web dashboard | ✅ Complete | 5 screens, live data, single file |
 | Static file serving | ✅ Complete | Path-traversal protected |
@@ -492,16 +497,20 @@ open http://localhost:7777
 
 Each item in section 7 is designed to be built independently without touching existing code except for adding one registration call or one import.
 
-**Easiest first items (warmup):**
-1. `skills/telegram/handler.py` — 30 lines, just `urllib.request` + vault secrets
-2. `skills/slack/handler.py` — same pattern
-3. `GET /api/users` endpoint in `server.py` — 5 lines using existing `store.fetch_all("users")`
-4. `GET /api/projects/<id>/memory` endpoint — 5 lines using `store.raw_query`
+**Completed warmup items (v0.3.0):**
+1. ✅ `skills/telegram/handler.py` — send + get_updates
+2. ✅ `skills/slack/handler.py` — post + history + channels
+3. ✅ User management API (GET/POST /api/users, DELETE, PUT role/password)
+4. ✅ Memory API (GET + DELETE /api/projects/<id>/memory)
+5. ✅ Task/schedule API (DELETE tasks/<id>, PUT schedule)
 
-**Medium items:**
-5. SSE stream endpoint — new pattern but contained in `server.py`
-6. Planner→executor subtask spawning — modify `scheduler.py:run_task()`
-7. Ollama embeddings — modify `memory.py:_embed()` behind a feature flag
+**Next items:**
+1. SSE stream endpoint (`GET /api/events/stream`) — new pattern but contained in `server.py`
+2. WhatsApp skill (`skills/whatsapp/handler.py`) — Meta Business Cloud API
+3. Gmail skill (`skills/gmail/handler.py`) — OAuth2 refresh token flow
+4. Planner→executor subtask spawning — modify `scheduler.py:run_task()`
+5. Ollama embeddings — modify `memory.py:_embed()` behind a feature flag
+6. Web dashboard: Users page, Memory browser, Settings page
 
 ### Step 3: Test discipline
 
