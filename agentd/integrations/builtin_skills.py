@@ -109,7 +109,7 @@ def skill_fs_write(params: dict, secrets: dict) -> dict:
         return {"error": "path required"}
     # Safety: only allow writes under /tmp or configured project dir
     p = Path(path).resolve()
-    allowed = [Path("/tmp"), Path("/var/lib/agentd/projects")]
+    allowed = [Path("/tmp").resolve(), Path("/var/lib/agentd/projects").resolve()]
     if not any(str(p).startswith(str(a)) for a in allowed):
         return {"error": f"Write not allowed to {p} – use /tmp or project dirs"}
     p.parent.mkdir(parents=True, exist_ok=True)
