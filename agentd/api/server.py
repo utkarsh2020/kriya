@@ -207,7 +207,7 @@ def me(h: AgentOSHandler, *_):
 def status(h: AgentOSHandler, *_):
     h._send({
         "status": "running",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "arch": _get_arch(),
         "providers": [p.name for p in get_config().providers if p.enabled],
         "uptime_s": int(time.time() - _start_time),
@@ -447,73 +447,6 @@ def del_proj_secret(h: AgentOSHandler, *_, **params):
     h._send({"deleted": True})
 
 
-# ── Task extras ───────────────────────────────────────────────────────────
-
-@route("DELETE", "/api/projects/<project_id>/tasks/<id>")
-def delete_task(h: AgentOSHandler, *_, **params):
-    if not h._require("task:write"):
-        return
-    t = store.fetch_one("tasks", params["id"])
-    if not t or t.get("project_id") != params["project_id"]:
-        return h._err("Not found", 404)
-    store.delete("tasks", params["id"])
-    h._send({"deleted": True})
-
-
-@route("PUT", "/api/projects/<id>/schedule")
-def update_schedule(h: AgentOSHandler, *_, **params):
-    if not h._require("project:write"):
-        return
-    body = h._body()
-    sched = body.get("schedule", "").strip()
-    if not sched:
-        return h._err("schedule required")
-    store.update("projects", params["id"], schedule=sched, updated_at=time.time())
-    # Upsert scheduled_job
-    existing = store.raw_query("SELECT id FROM scheduled_jobs WHERE project_id=?", (params["id"],))
-    if existing:
-        store.raw_query(
-            "UPDATE scheduled_jobs SET schedule=?, next_run=?, enabled=1 WHERE project_id=?",
-            (sched, next_run_time(sched), params["id"])
-        )
-    else:
-        store.insert("scheduled_jobs",
-            project_id=params["id"],
-            schedule=sched,
-            next_run=next_run_time(sched),
-        )
-    h._send({"updated": True, "schedule": sched})
-
-
-# ── Memory ─────────────────────────────────────────────────────────────────
-
-@route("GET", "/api/projects/<project_id>/memory")
-def list_project_memory(h: AgentOSHandler, path, qs, **params):
-    if not h._require("project:read"):
-        return
-    limit = int(qs.get("limit", [50])[0])
-    rows = store.raw_query(
-        "SELECT id, agent_id, content, importance, created_at FROM memory "
-        "WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
-        (params["project_id"], limit)
-    )
-    h._send(rows)
-
-
-@route("DELETE", "/api/projects/<project_id>/memory/<id>")
-def delete_memory(h: AgentOSHandler, *_, **params):
-    if not h._require("project:write"):
-        return
-    rows = store.raw_query(
-        "SELECT id FROM memory WHERE id=? AND project_id=?",
-        (params["id"], params["project_id"])
-    )
-    if not rows:
-        return h._err("Not found", 404)
-    store.raw_query("DELETE FROM memory WHERE id=?", (params["id"],))
-    h._send({"deleted": True})
-
-
 # ── Events (audit log) ────────────────────────────────────────────────────
 
 @route("GET", "/api/events")
@@ -624,95 +557,6 @@ def list_skills_endpoint(h: AgentOSHandler, *_):
         return
     from agentd.core.agent import _skill_handlers
     h._send([{"id": sid, "loaded": True} for sid in _skill_handlers])
-
-
-# ── Users ────────────────────────────────────────────────────────────────
-
-@route("GET", "/api/users")
-def list_users(h: AgentOSHandler, *_):
-    if not h._require("project:read"):
-        return
-    users = store.fetch_all("users")
-    for u in users:
-        u.pop("password_hash", None)
-    h._send(users)
-
-
-@route("POST", "/api/users")
-def create_user(h: AgentOSHandler, *_):
-    if not h._require("admin"):
-        return
-    body = h._body()
-    username = body.get("username", "").strip()
-    password = body.get("password", "")
-    role = body.get("role", "read_only")
-    if not username:
-        return h._err("username required")
-    if not password:
-        return h._err("password required")
-    from agentd.security.vault import ROLES
-    if role not in ROLES:
-        return h._err(f"invalid role, must be one of: {', '.join(ROLES)}")
-    from agentd.security.vault import hash_password
-    hashed = hash_password(password)
-    uid = store.insert("users",
-        username=username,
-        password_hash=hashed,
-        role=role,
-    )
-    user = store.fetch_one("users", uid)
-    user.pop("password_hash", None)
-    h._send(user, 201)
-
-
-@route("DELETE", "/api/users/<id>")
-def delete_user(h: AgentOSHandler, *_, **params):
-    if not h._require("admin"):
-        return
-    user = store.fetch_one("users", params["id"])
-    if not user:
-        return h._err("User not found", 404)
-    store.delete("users", params["id"])
-    h._send({"deleted": True})
-
-
-@route("PUT", "/api/users/<id>/role")
-def change_user_role(h: AgentOSHandler, *_, **params):
-    if not h._require("admin"):
-        return
-    user = store.fetch_one("users", params["id"])
-    if not user:
-        return h._err("User not found", 404)
-    body = h._body()
-    new_role = body.get("role", "")
-    from agentd.security.vault import ROLES
-    if new_role not in ROLES:
-        return h._err(f"invalid role, must be one of: {', '.join(ROLES)}")
-    store.update("users", params["id"], role=new_role)
-    user = store.fetch_one("users", params["id"])
-    user.pop("password_hash", None)
-    h._send(user)
-
-
-@route("PUT", "/api/users/<id>/password")
-def change_user_password(h: AgentOSHandler, *_, **params):
-    claims = h._claims()
-    if not claims:
-        return h._err("Unauthorized", 401)
-    target_user = store.fetch_one("users", params["id"])
-    if not target_user:
-        return h._err("User not found", 404)
-    is_admin = has_capability(claims.get("rol", ""), "admin")
-    is_self = claims.get("sub") == params["id"]
-    if not is_admin and not is_self:
-        return h._err("Forbidden", 403)
-    body = h._body()
-    new_password = body.get("password", "")
-    if not new_password:
-        return h._err("password required")
-    hashed = hash_password(new_password)
-    store.update("users", params["id"], password_hash=hashed)
-    h._send({"updated": True})
 
 
 # ── Async bridge ──────────────────────────────────────────────────────────
