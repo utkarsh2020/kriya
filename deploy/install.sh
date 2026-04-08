@@ -33,7 +33,7 @@ PYTHON_VER=$($PYTHON --version 2>&1 | awk '{print $2}')
 
 echo ""
 echo "  ╔═══════════════════════════════════════════╗"
-echo "  ║        AgentOS Installer v0.2.0           ║"
+echo "  ║        AgentOS Installer v0.3.0           ║"
 echo "  ║   Raspberry Pi · Debian · Ubuntu          ║"
 echo "  ╚═══════════════════════════════════════════╝"
 echo ""
