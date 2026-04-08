@@ -333,7 +333,7 @@ agent secret delete --project myproject --key SLACK_TOKEN
 
 ```bash
 agent skill list
-agent skill install <skill-id>   # v2 — not yet implemented (drop handler.py manually)
+agent skill install <skill-id>   # v3 — drop handler.py into skills/<id>/ manually
 ```
 
 ### Monitoring & logs
@@ -550,6 +550,49 @@ Retrieve relevant memories by semantic similarity.
 }
 ```
 
+### `telegram.send`
+
+Send a message (or read updates) via the Telegram Bot API.
+
+```json
+{
+  "action": "skill_call",
+  "skill":  "telegram.send",
+  "params": { "text": "Pipeline finished.", "chat_id": "-100123456789" }
+}
+```
+
+| param | type | description |
+|---|---|---|
+| `action` | string | `"send"` (default) or `"get_updates"` |
+| `text` | string | Message text (required for send) |
+| `chat_id` | string | Overrides `TELEGRAM_CHAT_ID` secret |
+| `parse_mode` | string | `"HTML"` \| `"Markdown"` \| `"MarkdownV2"` |
+
+Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (default target).
+
+### `slack.post`
+
+Post a message to Slack or read channel history.
+
+```json
+{
+  "action": "skill_call",
+  "skill":  "slack.post",
+  "params": { "channel": "#alerts", "text": "Build passed." }
+}
+```
+
+| param | type | description |
+|---|---|---|
+| `action` | string | `"post"` (default), `"history"`, or `"channels"` |
+| `text` | string | Message text (required for post) |
+| `channel` | string | Overrides `SLACK_DEFAULT_CHANNEL` secret |
+| `blocks` | list | Slack Block Kit JSON (optional rich layout) |
+| `limit` | int | Max messages for history (default 10, max 200) |
+
+Secrets: `SLACK_TOKEN` (xoxb-...), `SLACK_DEFAULT_CHANNEL` (optional default).
+
 ---
 
 ## Writing a custom skill
@@ -690,6 +733,8 @@ All endpoints require `Authorization: Bearer <token>` unless noted.
 | `GET` | `/api/projects/<id>/tasks` | List tasks |
 | `POST` | `/api/projects/<id>/tasks` | Add task |
 | `GET` | `/api/tasks/<id>` | Task detail + agents |
+| `DELETE` | `/api/projects/<id>/tasks/<task_id>` | Delete a task |
+| `PUT` | `/api/projects/<id>/schedule` | Update project schedule |
 
 ### Agents
 
@@ -705,6 +750,23 @@ All endpoints require `Authorization: Bearer <token>` unless noted.
 | `GET` | `/api/projects/<id>/secrets` | List secret keys (values never returned) |
 | `POST` | `/api/projects/<id>/secrets` | Set a secret |
 | `DELETE` | `/api/projects/<id>/secrets/<key>` | Delete a secret |
+
+### Users
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/users` | List users (admin only) |
+| `POST` | `/api/users` | Create user (admin only) |
+| `DELETE` | `/api/users/<id>` | Delete user (admin only) |
+| `PUT` | `/api/users/<id>/role` | Change user role (admin only) |
+| `PUT` | `/api/users/<id>/password` | Change password (self or admin) |
+
+### Memory
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/projects/<id>/memory` | List project long-term memories |
+| `DELETE` | `/api/projects/<id>/memory/<mid>` | Delete a memory entry |
 
 ### Events
 
@@ -746,11 +808,11 @@ agentos/
 │   └── agent                # CLI tool
 ├── static/
 │   └── dashboard.html       # Web dashboard (single file, zero deps)
-├── skills/                  # Drop custom skill handler.py files here
-│   ├── gmail/
-│   ├── slack/
-│   ├── telegram/
-│   └── whatsapp/
+├── skills/                  # Custom skill handler.py files
+│   ├── telegram/            # telegram.send — send/receive via Telegram Bot API
+│   ├── slack/               # slack.post — post messages / read channel history
+│   ├── gmail/               # (stub — v2)
+│   └── whatsapp/            # (stub — v2)
 ├── examples/
 │   └── newsletter.toml      # Example multi-agent project
 ├── tests/
@@ -764,6 +826,15 @@ agentos/
 ---
 
 ## Changelog
+
+### v0.3.0
+- **Communication skills** — `telegram.send` and `slack.post` plugin skills
+  - `telegram.send`: send messages and poll updates via the Telegram Bot API (stdlib `urllib.request` only)
+  - `slack.post`: post messages, read channel history, list channels via the Slack Web API
+  - Both support project vault secrets (`TELEGRAM_BOT_TOKEN`, `SLACK_TOKEN`, etc.)
+- **User management API** — `GET/POST /api/users`, `DELETE /api/users/<id>`, `PUT /api/users/<id>/role`, `PUT /api/users/<id>/password`
+- **Memory API** — `GET /api/projects/<id>/memory`, `DELETE /api/projects/<id>/memory/<mid>`
+- **Task / schedule API** — `DELETE /api/projects/<id>/tasks/<id>`, `PUT /api/projects/<id>/schedule`
 
 ### v0.2.0
 - **Multi-architecture support** — explicit 32-bit (ARMv6, ARMv7) and 64-bit (ARM64, x86_64) coverage

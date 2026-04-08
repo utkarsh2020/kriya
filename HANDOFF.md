@@ -1,9 +1,9 @@
 # AgentOS — Project Handoff & Continuity Document
 
 **For:** AI-assisted development continuation (Kilo Code / Claude)  
-**Version at handoff:** v0.2.1  
-**Test status:** 40/40 passing  
-**Total source:** ~6,100 lines across 30 files, zero external dependencies
+**Version at handoff:** v0.3.0  
+**Test status:** 38/40 passing (2 pre-existing failures on Python 3.9: dict|list hint + macOS /tmp path; pass on Python 3.11)  
+**Total source:** ~6,500 lines across 32 files, zero external dependencies
 
 ---
 
@@ -267,6 +267,11 @@ This pattern is used in every test that needs an isolated temp directory.
 | Secrets vault | ✅ Complete | AES-GCM / HMAC-XOR, PBKDF2 |
 | Built-in skills (7) | ✅ Complete | http, scrape, fs, shell, memory |
 | Plugin skill loader | ✅ Complete | Auto-discover skills/*/handler.py |
+| Telegram skill | ✅ Complete | `skills/telegram/handler.py` — send + get_updates |
+| Slack skill | ✅ Complete | `skills/slack/handler.py` — post + history + channels |
+| User management API | ✅ Complete | GET/POST /api/users, DELETE, PUT role/password |
+| Memory API | ✅ Complete | GET + DELETE /api/projects/<id>/memory |
+| Task delete + schedule API | ✅ Complete | DELETE tasks/<id>, PUT schedule |
 | CLI tool | ✅ Complete | All commands, live monitor |
 | Web dashboard | ✅ Complete | 5 screens, live data, single file |
 | Static file serving | ✅ Complete | Path-traversal protected |
@@ -284,22 +289,14 @@ This section is the primary guide for the next development phase. Items are orde
 
 ### 7.1 Communication Skills (v2 Priority 1)
 
-**Telegram skill** (`skills/telegram/handler.py`)
-- Bot API: `POST https://api.telegram.org/bot{TOKEN}/sendMessage`
-- Secrets needed: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- Also need: incoming message polling or webhook receiver for trigger-on-message
-- Pattern: same as `builtin_skills.py` — `urllib.request`, return `{"ok": True, "message_id": ...}`
+✅ **Telegram skill** (`skills/telegram/handler.py`) — DONE. Supports `send` (text + parse_mode) and `get_updates` (polling). Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+
+✅ **Slack skill** (`skills/slack/handler.py`) — DONE. Supports `post` (text + Block Kit), `history`, and `channels` list. Secrets: `SLACK_TOKEN`, `SLACK_DEFAULT_CHANNEL`.
 
 **WhatsApp skill** (`skills/whatsapp/handler.py`)
 - WhatsApp Business Cloud API (Meta): `POST https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages`
 - Secrets: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`
 - Personal WhatsApp (non-Business): requires unofficial `whatsapp-web.js` or `baileys` — not stdlib-compatible, needs a sidecar process
-
-**Slack skill** (`skills/slack/handler.py`)
-- `POST https://slack.com/api/chat.postMessage`
-- Headers: `Authorization: Bearer {SLACK_TOKEN}`
-- Secrets: `SLACK_TOKEN`, optionally `SLACK_DEFAULT_CHANNEL`
-- Also useful: `conversations.list`, `users.info`, incoming webhooks (simpler, no token scopes)
 
 **Gmail skill** (`skills/gmail/handler.py`)
 - Needs OAuth2 — the only Pi Zero-compatible approach is:
@@ -351,20 +348,20 @@ The current system runs agents sequentially within a task. True multi-agent coll
 
 ### 7.4 API Gaps (v2 Priority 3)
 
-These endpoints are referenced in the README or dashboard but not yet implemented:
+✅ = implemented. Remaining:
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/users` | GET | List users |
-| `/api/users` | POST | Create user |
-| `/api/users/<id>` | DELETE | Delete user |
-| `/api/users/<id>/role` | PUT | Change user role |
-| `/api/users/<id>/password` | PUT | Change password |
-| `/api/projects/<id>/memory` | GET | List project memories |
-| `/api/projects/<id>/memory/<id>` | DELETE | Delete a memory |
-| `/api/projects/<id>/tasks/<id>` | DELETE | Delete a task |
-| `/api/projects/<id>/schedule` | PUT | Update schedule |
-| `/api/events/stream` | GET | SSE stream |
+| Endpoint | Method | Description | Status |
+|---|---|---|---|
+| `/api/users` | GET | List users | ✅ Done |
+| `/api/users` | POST | Create user | ✅ Done |
+| `/api/users/<id>` | DELETE | Delete user | ✅ Done |
+| `/api/users/<id>/role` | PUT | Change user role | ✅ Done |
+| `/api/users/<id>/password` | PUT | Change password | ✅ Done |
+| `/api/projects/<id>/memory` | GET | List project memories | ✅ Done |
+| `/api/projects/<id>/memory/<id>` | DELETE | Delete a memory | ✅ Done |
+| `/api/projects/<id>/tasks/<id>` | DELETE | Delete a task | ✅ Done |
+| `/api/projects/<id>/schedule` | PUT | Update schedule | ✅ Done |
+| `/api/events/stream` | GET | SSE stream | ⬜ Remaining |
 
 ### 7.5 Skill SDK & Registry (v2 Priority 4)
 
@@ -481,16 +478,20 @@ open http://localhost:7777
 
 Each item in section 7 is designed to be built independently without touching existing code except for adding one registration call or one import.
 
-**Easiest first items (warmup):**
-1. `skills/telegram/handler.py` — 30 lines, just `urllib.request` + vault secrets
-2. `skills/slack/handler.py` — same pattern
-3. `GET /api/users` endpoint in `server.py` — 5 lines using existing `store.fetch_all("users")`
-4. `GET /api/projects/<id>/memory` endpoint — 5 lines using `store.raw_query`
+**Completed warmup items (v0.3.0):**
+1. ✅ `skills/telegram/handler.py` — send + get_updates
+2. ✅ `skills/slack/handler.py` — post + history + channels
+3. ✅ User management API (GET/POST /api/users, DELETE, PUT role/password)
+4. ✅ Memory API (GET + DELETE /api/projects/<id>/memory)
+5. ✅ Task/schedule API (DELETE tasks/<id>, PUT schedule)
 
-**Medium items:**
-5. SSE stream endpoint — new pattern but contained in `server.py`
-6. Planner→executor subtask spawning — modify `scheduler.py:run_task()`
-7. Ollama embeddings — modify `memory.py:_embed()` behind a feature flag
+**Next items:**
+1. SSE stream endpoint (`GET /api/events/stream`) — new pattern but contained in `server.py`
+2. WhatsApp skill (`skills/whatsapp/handler.py`) — Meta Business Cloud API
+3. Gmail skill (`skills/gmail/handler.py`) — OAuth2 refresh token flow
+4. Planner→executor subtask spawning — modify `scheduler.py:run_task()`
+5. Ollama embeddings — modify `memory.py:_embed()` behind a feature flag
+6. Web dashboard: Users page, Memory browser, Settings page
 
 ### Step 3: Test discipline
 
