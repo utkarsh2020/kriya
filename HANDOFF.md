@@ -289,23 +289,42 @@ This section is the primary guide for the next development phase. Items are orde
 
 ### 7.1 Communication Skills (v2 Priority 1)
 
-✅ **Telegram skill** (`skills/telegram/handler.py`) — DONE. Supports `send` (text + parse_mode) and `get_updates` (polling). Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+**Telegram skill** (`skills/telegram/handler.py`) — ✅ Complete
+- Bot API: `POST https://api.telegram.org/bot{TOKEN}/sendMessage`
+- Secrets needed: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- `handle(params, secrets)`: Send text messages
+- `handle_photo(params, secrets)`: Send photos
+- `handle_get_updates(params, secrets)`: Long poll for incoming messages
+- `handle_set_webhook(params, secrets)`: Register webhook URL
+- `handle_delete_webhook(params, secrets)`: Remove webhook
 
-✅ **Slack skill** (`skills/slack/handler.py`) — DONE. Supports `post` (text + Block Kit), `history`, and `channels` list. Secrets: `SLACK_TOKEN`, `SLACK_DEFAULT_CHANNEL`.
-
-**WhatsApp skill** (`skills/whatsapp/handler.py`)
+**WhatsApp skill** (`skills/whatsapp/handler.py`) — ✅ Complete
 - WhatsApp Business Cloud API (Meta): `POST https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages`
 - Secrets: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`
-- Personal WhatsApp (non-Business): requires unofficial `whatsapp-web.js` or `baileys` — not stdlib-compatible, needs a sidecar process
+- `handle(params, secrets)`: Send text, image, document, audio, video, sticker messages
+- `handle_list(params, secrets)`: Send interactive list messages
+- `handle_template(params, secrets)`: Send template messages
+- `handle_mark_seen(params, secrets)`: Send read receipts
 
-**Gmail skill** (`skills/gmail/handler.py`)
-- Needs OAuth2 — the only Pi Zero-compatible approach is:
-  1. User does OAuth flow on a desktop machine, gets `refresh_token`
-  2. Store `refresh_token` in vault
-  3. Skill exchanges `refresh_token` for `access_token` via `POST https://oauth2.googleapis.com/token`
-  4. Use `access_token` to call Gmail API via `urllib.request`
+**Slack skill** (`skills/slack/handler.py`) — ✅ Complete
+- `POST https://slack.com/api/chat.postMessage`
+- Headers: `Authorization: Bearer {SLACK_TOKEN}`
+- Secrets: `SLACK_TOKEN`, optionally `SLACK_DEFAULT_CHANNEL`
+- `handle(params, secrets)`: Send messages with text, blocks, attachments
+- `handle_conversations_list(params, secrets)`: List channels
+- `handle_users_info(params, secrets)`: Get user info
+- `handle_webhook(params, secrets)`: Send via incoming webhook
+- `handle_update(params, secrets)`: Update existing message
+- `handle_delete(params, secrets)`: Delete message
+
+**Gmail skill** (`skills/gmail/handler.py`) — ✅ Complete
+- OAuth2 flow: exchange refresh token for access token via `POST https://oauth2.googleapis.com/token`
 - Secrets: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
-- Operations: `gmail.read` (list/get messages), `gmail.send` (create + send)
+- `handle(params, secrets)`: Route to sub-operations based on mode
+- `handle_send(params, secrets)`: Send emails with text/HTML, attachments
+- `handle_list(params, secrets)`: List emails with query support
+- `handle_get(params, secrets)`: Get specific email details
+- `handle_draft(params, secrets)`: Create draft emails
 
 ### 7.2 Multi-Agent Collaboration Patterns (v2 Priority 2)
 
@@ -348,20 +367,20 @@ The current system runs agents sequentially within a task. True multi-agent coll
 
 ### 7.4 API Gaps (v2 Priority 3)
 
-✅ = implemented. Remaining:
+These endpoints are referenced in the README or dashboard but not yet implemented:
 
-| Endpoint | Method | Description | Status |
-|---|---|---|---|
-| `/api/users` | GET | List users | ✅ Done |
-| `/api/users` | POST | Create user | ✅ Done |
-| `/api/users/<id>` | DELETE | Delete user | ✅ Done |
-| `/api/users/<id>/role` | PUT | Change user role | ✅ Done |
-| `/api/users/<id>/password` | PUT | Change password | ✅ Done |
-| `/api/projects/<id>/memory` | GET | List project memories | ✅ Done |
-| `/api/projects/<id>/memory/<id>` | DELETE | Delete a memory | ✅ Done |
-| `/api/projects/<id>/tasks/<id>` | DELETE | Delete a task | ✅ Done |
-| `/api/projects/<id>/schedule` | PUT | Update schedule | ✅ Done |
-| `/api/events/stream` | GET | SSE stream | ⬜ Remaining |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/users` | GET | List users | ✅ Complete |
+| `/api/users` | POST | Create user | ✅ Complete |
+| `/api/users/<id>` | DELETE | Delete user | ✅ Complete |
+| `/api/users/<id>/role` | PUT | Change user role | ✅ Complete |
+| `/api/users/<id>/password` | PUT | Change password | ✅ Complete |
+| `/api/projects/<id>/memory` | GET | List project memories |
+| `/api/projects/<id>/memory/<id>` | DELETE | Delete a memory |
+| `/api/projects/<id>/tasks/<id>` | DELETE | Delete a task |
+| `/api/projects/<id>/schedule` | PUT | Update schedule | ✅ Complete |
+| `/api/events/stream` | GET | SSE stream |
 
 ### 7.5 Skill SDK & Registry (v2 Priority 4)
 

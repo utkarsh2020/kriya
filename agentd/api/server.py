@@ -287,6 +287,33 @@ def delete_project(h: AgentOSHandler, *_, **params):
     h._send({"deleted": True})
 
 
+@route("PUT", "/api/projects/<id>/schedule")
+def update_project_schedule(h: AgentOSHandler, *_, **params):
+    claims = h._require("project:write")
+    if not claims:
+        return
+    pid = params["id"]
+    p = store.fetch_one("projects", pid)
+    if not p:
+        return h._err("Project not found", 404)
+    body = h._body()
+    schedule = body.get("schedule", "")
+    if schedule:
+        try:
+            next_run = next_run_time(schedule)
+        except Exception:
+            return h._err("Invalid schedule format", 400)
+    else:
+        next_run = None
+    store.update("projects", pid, {"schedule": schedule if schedule else None, "updated_at": time.time()})
+    jobs = store.fetch_where("scheduled_jobs", "project_id = ?", (pid,))
+    if jobs:
+        job_id = jobs[0]["id"]
+        store.update("scheduled_jobs", job_id, {"schedule": schedule if schedule else None, "next_run": next_run})
+    p = store.fetch_one("projects", pid)
+    h._send(p)
+
+
 # ── Tasks ──────────────────────────────────────────────────────────────────
 
 @route("GET", "/api/projects/<project_id>/tasks")
@@ -554,6 +581,95 @@ def list_skills_endpoint(h: AgentOSHandler, *_):
         return
     from agentd.core.agent import _skill_handlers
     h._send([{"id": sid, "loaded": True} for sid in _skill_handlers])
+
+
+# ── Users ────────────────────────────────────────────────────────────────
+
+@route("GET", "/api/users")
+def list_users(h: AgentOSHandler, *_):
+    if not h._require("project:read"):
+        return
+    users = store.fetch_all("users")
+    for u in users:
+        u.pop("password_hash", None)
+    h._send(users)
+
+
+@route("POST", "/api/users")
+def create_user(h: AgentOSHandler, *_):
+    if not h._require("admin"):
+        return
+    body = h._body()
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    role = body.get("role", "read_only")
+    if not username:
+        return h._err("username required")
+    if not password:
+        return h._err("password required")
+    from agentd.security.vault import ROLES
+    if role not in ROLES:
+        return h._err(f"invalid role, must be one of: {', '.join(ROLES)}")
+    from agentd.security.vault import hash_password
+    hashed = hash_password(password)
+    uid = store.insert("users",
+        username=username,
+        password_hash=hashed,
+        role=role,
+    )
+    user = store.fetch_one("users", uid)
+    user.pop("password_hash", None)
+    h._send(user, 201)
+
+
+@route("DELETE", "/api/users/<id>")
+def delete_user(h: AgentOSHandler, *_, **params):
+    if not h._require("admin"):
+        return
+    user = store.fetch_one("users", params["id"])
+    if not user:
+        return h._err("User not found", 404)
+    store.delete("users", params["id"])
+    h._send({"deleted": True})
+
+
+@route("PUT", "/api/users/<id>/role")
+def change_user_role(h: AgentOSHandler, *_, **params):
+    if not h._require("admin"):
+        return
+    user = store.fetch_one("users", params["id"])
+    if not user:
+        return h._err("User not found", 404)
+    body = h._body()
+    new_role = body.get("role", "")
+    from agentd.security.vault import ROLES
+    if new_role not in ROLES:
+        return h._err(f"invalid role, must be one of: {', '.join(ROLES)}")
+    store.update("users", params["id"], role=new_role)
+    user = store.fetch_one("users", params["id"])
+    user.pop("password_hash", None)
+    h._send(user)
+
+
+@route("PUT", "/api/users/<id>/password")
+def change_user_password(h: AgentOSHandler, *_, **params):
+    claims = h._claims()
+    if not claims:
+        return h._err("Unauthorized", 401)
+    target_user = store.fetch_one("users", params["id"])
+    if not target_user:
+        return h._err("User not found", 404)
+    is_admin = has_capability(claims.get("rol", ""), "admin")
+    is_self = claims.get("sub") == params["id"]
+    if not is_admin and not is_self:
+        return h._err("Forbidden", 403)
+    body = h._body()
+    new_password = body.get("password", "")
+    if not new_password:
+        return h._err("password required")
+    hashed = hash_password(new_password)
+    store.update("users", params["id"], password_hash=hashed)
+    h._send({"updated": True})
 
 
 # ── Async bridge ──────────────────────────────────────────────────────────
